@@ -21,19 +21,25 @@ const Preview = styled.div`
 
 `;
 
-const PreviewBox = ({ message, loading }: { message: string; loading: boolean }) => {
+const PreviewBox = ({ message, loading, error }: { message: string; loading: boolean; error: string }) => {
   return (
     <Preview>
       {
-        loading ?
-        <MirageLoader color="#ffffff" size={8} showMessaging />
+        error ?
+        <div className="rounded-md border border-red-300 bg-red-950/60 p-4 text-red-100" role="alert">
+          <strong>Response failed.</strong>
+          <p className="mt-2">{error}</p>
+        </div>
         :
-        message.split("\n").map((chunk, idx) => (
-          <Fragment key={idx}>
-           {chunk}
-           <br />
-         </Fragment>
-       ))
+        <>
+          {message.split("\n").map((chunk, idx) => (
+            <Fragment key={idx}>
+             {chunk}
+             <br />
+           </Fragment>
+          ))}
+          {loading && <MirageLoader color="#ffffff" size={8} showMessaging />}
+        </>
 
       }
 

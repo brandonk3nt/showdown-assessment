@@ -1,9 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { getJwtToken, isAuthCookieValid, redirectToAuth } from "./cookie";
 import { getAppEnv } from "./helper";
 
 export const WebSocketHandlers = () => {
+  const [hasError, setHasError] = useState(false);
+
   // HOOKS
   const getSocketUrl = useCallback(() => {
     let token = getJwtToken();
@@ -14,10 +16,11 @@ export const WebSocketHandlers = () => {
   const { sendJsonMessage, lastMessage, readyState } = useWebSocket(
     getSocketUrl,
     {
-      onOpen: () => {},
+      onOpen: () => setHasError(false),
       shouldReconnect: () => true,
       reconnectAttempts: 3,
       onError: () => {
+        setHasError(true);
         const authCookieIsValid = isAuthCookieValid();
         if (!authCookieIsValid) {
           redirectToAuth();
@@ -38,5 +41,6 @@ export const WebSocketHandlers = () => {
     sendJsonMessage,
     lastMessage,
     status: connectionStatus,
+    hasError,
   };
 };

@@ -1,4 +1,4 @@
-import { useImperativeHandle, forwardRef, useState, useEffect, useCallback } from "react";
+import { useImperativeHandle, forwardRef, useState, useEffect, useCallback, useRef } from "react";
 import styled from "styled-components";
 import { WebSocketHandlers } from "../utils/websocket";
 // import { getUserAsuriteFromAuthCookie } from "../utils/cookie";
@@ -20,22 +20,47 @@ interface ModelViewProps {
   buttonName: string
   updateLastMessageTimestamp: (timestamp: number) => void;
   onChooseModel: (modelName: string) => void;
+  onError: () => void;
+  onComplete: () => void;
 }
 
+const getResponseError = (response: string) => {
+  if (response.startsWith("An error has occurred:")) {
+    return response.replace("An error has occurred:", "").trim();
+  }
+
+  try {
+    const parsed = JSON.parse(response);
+    if (parsed.message && (parsed.requestId || parsed.connectionId)) {
+      return parsed.message === "Endpoint request timed out"
+        ? "This model took too long to respond. Please start a new round."
+        : parsed.message;
+    }
+  } catch {
+    // Normal model responses are not JSON, so parsing failures are expected.
+  }
+
+  return null;
+};
+
 const ModelView = forwardRef<{}, ModelViewProps>(
-  ({ queryEnded, buttonName, updateLastMessageTimestamp, onChooseModel }, ref) => {
+  ({ queryEnded, buttonName, updateLastMessageTimestamp, onChooseModel, onError, onComplete }, ref) => {
     const [isLoading, setIsLoading] = useState(false);
     const [fullMessage, setFullMessage] = useState("");
+    const [errorMessage, setErrorMessage] = useState("");
+    const hasResponseContent = useRef(false);
     const [currentModel, setCurrentModel] = useState<{
       key: string;
       name: string;
     } | null>(null);
-    const { sendJsonMessage, lastMessage } = WebSocketHandlers();
+    const { sendJsonMessage, lastMessage, hasError } = WebSocketHandlers();
     // const userAsurite = getUserAsuriteFromAuthCookie();
     useImperativeHandle(ref, () => ({
       submitQuery(nextQuery: string, model: { key: string; name: string; provider: string }) {
         setIsLoading(true)
         setFullMessage("");
+        setErrorMessage("");
+        hasResponseContent.current = false;
         setCurrentModel(model);
         sendJsonMessage({
           action: "queryV2",
@@ -73,17 +98,49 @@ const ModelView = forwardRef<{}, ModelViewProps>(
 
     useEffect(() => {
       if (lastMessage) {
-        let response =lastMessage.data === '<EOS>' ? '' : lastMessage.data;
-        setIsLoading(false);
-        setFullMessage((prev) => (prev || "") + (response as string));
+        if (lastMessage.data === '<EOS>') {
+          setIsLoading(false);
+          if (!hasResponseContent.current) {
+            setErrorMessage("This model returned an empty response. Please start a new round.");
+            onError();
+          } else {
+            onComplete();
+          }
+          updateLastMessageTimestamp(Date.now());
+          return;
+        }
+
+        const response = String(lastMessage.data);
+        const responseError = getResponseError(response);
+        if (responseError) {
+          setIsLoading(false);
+          setErrorMessage(responseError);
+          onError();
+        } else {
+          if (response.trim()) hasResponseContent.current = true;
+          setFullMessage((prev) => (prev || "") + response);
+        }
         const now = new Date();
         updateLastMessageTimestamp(Number(now));
       }
-    }, [lastMessage, updateLastMessageTimestamp]);
+    }, [lastMessage, onComplete, onError, updateLastMessageTimestamp]);
+
+    useEffect(() => {
+      if (hasError && isLoading) {
+        setIsLoading(false);
+        setErrorMessage("The response service disconnected. Please start a new round.");
+        updateLastMessageTimestamp(Date.now());
+        onError();
+      }
+    }, [hasError, isLoading, onError, updateLastMessageTimestamp]);
 
     return (
       <div className="flex flex-col flex-1 items-center">
-        <PreviewBox message={fullMessage} loading={isLoading} />
+        <PreviewBox
+          message={fullMessage}
+          loading={isLoading}
+          error={errorMessage}
+        />
         <Button
           className={`bg-[#8c1c3f] text-[#FAFAFA] mt-6 transition-opacity opacity-0 cursor-pointer ${
             queryEnded ? "opacity-100" : ""

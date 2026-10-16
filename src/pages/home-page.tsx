@@ -3,8 +3,8 @@ import styled from "styled-components";
 import ErrorModal from "../components/modals/error-modal";
 import ResultModal from "../components/modals/result-modal";
 import ModelView, { ImperativeRef } from "../components/model-view";
-// import { formatTime } from "../utils/helper";
 import {
+  formatTime,
   getModelOptions,
   getTwoRandomModels,
   type ModelOption,
@@ -78,22 +78,22 @@ const Button = styled.button`
   background-color: #ffc627;
 `;
 
-// const VSText = styled.h2`
-//   font-size: 160px;
-//   line-height: 180px;
-//   color: #191919;
-//   font-weight: bold;
-// `;
+const VSText = styled.h2`
+  font-size: 160px;
+  line-height: 180px;
+  color: #191919;
+  font-weight: bold;
+`;
 
-// const TimerText = styled.span`
-//   letter-spacing: -1.4px;
-//   color: #191919;
-//   text-align: center;
-//   font-size: 40px;
-//   line-height: 44px;
-//   font-weight: bold;
-//   margin-top: -24px;
-// `;
+const TimerText = styled.span`
+  letter-spacing: -1.4px;
+  color: #191919;
+  text-align: center;
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: bold;
+  margin-top: -24px;
+`;
 
 function Home() {
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -110,10 +110,16 @@ function Home() {
   const [modelsError, setModelsError] = useState(false);
   const [winModelIdx, setWinModelIdx] = useState<number | null>(null);
   const [disableTimer, setDisableTimer] = useState(false);
+  const [roundFailed, setRoundFailed] = useState(false);
+  const [modelResponsesComplete, setModelResponsesComplete] = useState([
+    false,
+    false,
+  ]);
 
   const modelViewRef1 = useRef<ImperativeRef | null>(null);
   const modelViewRef2 = useRef<ImperativeRef | null>(null);
   const [counter, setCounter] = useState(60);
+  const [timerActive, setTimerActive] = useState(false);
 
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
@@ -140,12 +146,51 @@ function Home() {
         setDisableTimer(false);
       }
 
-      if (disableTimer && counter > 0) {
-        setCounter((prev) => prev - 1);
-      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [lastMessageTimestamp, disableTimer, counter]);
+  }, [lastMessageTimestamp]);
+
+  useEffect(() => {
+    if (!timerActive) return;
+
+    const interval = setInterval(() => {
+      setCounter((previousCounter) => {
+        if (previousCounter <= 1) {
+          setTimerActive(false);
+          setShowErrorModal(true);
+          return 0;
+        }
+
+        return previousCounter - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timerActive]);
+
+  const handleModelError = useCallback(() => {
+    setRoundFailed(true);
+    setTimerActive(false);
+  }, []);
+
+  const handleModelComplete = useCallback((modelIndex: number) => {
+    setModelResponsesComplete((previous) => {
+      const updated = [...previous];
+      updated[modelIndex] = true;
+      return updated;
+    });
+  }, []);
+
+  const handleModelOneComplete = useCallback(
+    () => handleModelComplete(0),
+    [handleModelComplete],
+  );
+  const handleModelTwoComplete = useCallback(
+    () => handleModelComplete(1),
+    [handleModelComplete],
+  );
+
+  const bothModelsComplete = modelResponsesComplete.every(Boolean);
 
   const handleSubmit = useCallback(
     (evt: React.FormEvent<HTMLFormElement>) => {
@@ -154,6 +199,11 @@ function Home() {
 
       setRandomModels(models);
       setCounter(60);
+      setTimerActive(true);
+      setRoundFailed(false);
+      setModelResponsesComplete([false, false]);
+      setShowErrorModal(false);
+      setLastMessageTimestamp(null);
       setDisableTimer(true);
       if (modelViewRef1.current) {
         modelViewRef1.current.submitQuery(nextQuery, models[0]);
@@ -203,7 +253,7 @@ function Home() {
           <Input placeholder="Type a prompt" onChange={handleQueryChange} />
           <Button
             className="bg-red-300"
-            disabled={modelsLoading || (!nextQuery && !disableTimer)}
+            disabled={modelsLoading || !nextQuery || timerActive || disableTimer}
             type="submit"
           >
             {modelsLoading ? "Loading…" : "Begin!"}
@@ -215,23 +265,29 @@ function Home() {
         <ModelView
           ref={modelViewRef1}
           updateLastMessageTimestamp={setLastMessageTimestamp}
-          queryEnded={!disableTimer && !!lastMessageTimestamp}
+          queryEnded={!disableTimer && !!lastMessageTimestamp && timerActive && !roundFailed && bothModelsComplete}
           buttonName="Choose model 1"
+          onError={handleModelError}
+          onComplete={handleModelOneComplete}
           onChooseModel={() => {
+            setTimerActive(false);
             setWinModelIdx(0);
             setShowResultModal(true);
           }}
         />
         <div className="flex flex-col mt-[-60px] w-[200px]">
-          {/* <VSText>VS</VSText>
-          <TimerText>{formatTime(counter)}</TimerText> */}
+          <VSText>VS</VSText>
+          <TimerText>{formatTime(counter)}</TimerText>
         </div>
         <ModelView
           ref={modelViewRef2}
           updateLastMessageTimestamp={setLastMessageTimestamp}
-          queryEnded={!disableTimer && !!lastMessageTimestamp}
+          queryEnded={!disableTimer && !!lastMessageTimestamp && timerActive && !roundFailed && bothModelsComplete}
           buttonName="Choose model 2"
+          onError={handleModelError}
+          onComplete={handleModelTwoComplete}
           onChooseModel={() => {
+            setTimerActive(false);
             setWinModelIdx(1);
             setShowResultModal(true);
           }}

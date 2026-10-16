@@ -40,7 +40,7 @@ const ModalBody = styled.div`
   justify-content: center;
 `;
 
-const TryButton = styled.div`
+const TryButton = styled.button`
   background-color: #ffc627;
   text-align: center;
   border-radius: 20px;
@@ -102,7 +102,9 @@ const ErrorModal = ({ open, onClose }: ErrorModalProps) => {
           Don’t worry, you can always give it another shot!
         </span>
         <div className="flex gap-3.5">
-          <TryButton>Try again</TryButton>
+          <TryButton type="button" onClick={onClose}>
+            Try again
+          </TryButton>
           <StyledLink to="/leaderboard">View leaderboard</StyledLink>
         </div>
       </ModalBody>
