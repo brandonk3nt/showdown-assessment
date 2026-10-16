@@ -1,6 +1,53 @@
 import config from "../config";
 import ENV_CONFIG from "../config/env-config";
-import { AUTH_HOST, MODEL_OPTIONS } from "./constants";
+import { AUTH_HOST, MODELS_API_URL, MODEL_OPTIONS } from "./constants";
+
+export interface ModelOption {
+  key: string;
+  name: string;
+  provider: string;
+}
+
+export interface ModelOptionsResult {
+  models: ModelOption[];
+  usedFallback: boolean;
+}
+
+interface ApiModel {
+  name: string;
+  provider: string;
+  display?: { name?: string };
+  is_active: boolean;
+  capabilities?: { query?: boolean };
+}
+
+export const getModelOptions = async (): Promise<ModelOptionsResult> => {
+  try {
+    const response = await fetch(MODELS_API_URL, {
+      headers: {
+        Authorization: `Bearer ${import.meta.env.VITE_DEV_TOKEN}`,
+      },
+    });
+
+    if (!response.ok) throw new Error(`Models API returned ${response.status}`);
+
+    const data = (await response.json()) as { models: ApiModel[] };
+    const models = data.models
+      .filter((model) => model.is_active && model.capabilities?.query)
+      .map((model) => ({
+        key: model.name,
+        name: model.display?.name ?? model.name,
+        provider: model.provider,
+      }));
+
+    if (models.length < 2) throw new Error("Not enough models returned");
+
+    return { models, usedFallback: false };
+  } catch (error) {
+    console.error("Unable to load models; using fallback list.", error);
+    return { models: MODEL_OPTIONS, usedFallback: true };
+  }
+};
 
 export const shuffle = <T = unknown>(array: T[]) => {
   let currentIndex = array.length,
@@ -22,8 +69,10 @@ export const shuffle = <T = unknown>(array: T[]) => {
   return array;
 };
 
-export const getTwoRandomModels = (): { key: string; name: string }[] => {
-  const shuffledModels = shuffle(MODEL_OPTIONS);
+export const getTwoRandomModels = (
+  modelOptions: ModelOption[] = MODEL_OPTIONS,
+): ModelOption[] => {
+  const shuffledModels = shuffle([...modelOptions]);
   return shuffledModels.slice(0, 2);
 };
 

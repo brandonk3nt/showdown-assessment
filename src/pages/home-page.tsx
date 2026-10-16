@@ -3,8 +3,12 @@ import styled from "styled-components";
 import ErrorModal from "../components/modals/error-modal";
 import ResultModal from "../components/modals/result-modal";
 import ModelView, { ImperativeRef } from "../components/model-view";
-// import { getTwoRandomModels, formatTime } from "../utils/helper";
-import { getTwoRandomModels } from "../utils/helper";
+// import { formatTime } from "../utils/helper";
+import {
+  getModelOptions,
+  getTwoRandomModels,
+  type ModelOption,
+} from "../utils/helper";
 
 const Title = styled.h1`
   font-size: 96px;
@@ -101,12 +105,29 @@ function Home() {
   const [randomModels, setRandomModels] = useState<
     { key: string; name: string }[]
   >([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState(false);
   const [winModelIdx, setWinModelIdx] = useState<number | null>(null);
   const [disableTimer, setDisableTimer] = useState(false);
 
   const modelViewRef1 = useRef<ImperativeRef | null>(null);
   const modelViewRef2 = useRef<ImperativeRef | null>(null);
   const [counter, setCounter] = useState(60);
+
+  const loadModels = useCallback(async () => {
+    setModelsLoading(true);
+    setModelsError(false);
+
+    const result = await getModelOptions();
+    setModelOptions(result.models);
+    setModelsError(result.usedFallback);
+    setModelsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadModels();
+  }, [loadModels]);
 
   useEffect(() => {
     // Check if the last message was received more than 1 second ago to re-enable the ability to query models.
@@ -129,7 +150,7 @@ function Home() {
   const handleSubmit = useCallback(
     (evt: React.FormEvent<HTMLFormElement>) => {
       evt.preventDefault(); // Prevent the form from refreshing the page
-      const models = getTwoRandomModels();
+      const models = getTwoRandomModels(modelOptions);
 
       setRandomModels(models);
       setCounter(60);
@@ -141,7 +162,7 @@ function Home() {
         modelViewRef2.current.submitQuery(nextQuery, models[1]);
       }
     },
-    [nextQuery]
+    [modelOptions, nextQuery]
   );
 
   const handleQueryChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,15 +178,35 @@ function Home() {
         you to swiftly evaluate the model’s responses. Can you choose the AI
         with the most impressive answer before time runs out?
       </Description>
+      {modelsLoading && (
+        <p className="mb-3 text-white" aria-live="polite">
+          Loading available models…
+        </p>
+      )}
+      {modelsError && !modelsLoading && (
+        <p
+          className="mb-3 rounded-md bg-white px-4 py-2 text-[#191919]"
+          role="alert"
+        >
+          Couldn’t load the latest models. Using the fallback list.
+          <button
+            className="ml-2 font-bold underline"
+            type="button"
+            onClick={() => void loadModels()}
+          >
+            Retry
+          </button>
+        </p>
+      )}
       <div className="flex justify-center w-full">
         <form className="flex flex-col sm:flex-row justify-center items-center gap-2 w-full max-w-lg" onSubmit={handleSubmit}>
           <Input placeholder="Type a prompt" onChange={handleQueryChange} />
           <Button
             className="bg-red-300"
-            disabled={!nextQuery && !disableTimer}
+            disabled={modelsLoading || (!nextQuery && !disableTimer)}
             type="submit"
           >
-            Begin!
+            {modelsLoading ? "Loading…" : "Begin!"}
           </Button>
         </form>
       </div>

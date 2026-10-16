@@ -1,4 +1,5 @@
 export const AUTH_HOST = "https://weblogin.asu.edu/cas";
+export const MODELS_API_URL = "https://api-dev-poc.aiml.asu.edu/model";
 
 export const MODEL_OPTIONS = [
   // {
